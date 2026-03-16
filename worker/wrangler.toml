@@ -1,0 +1,10 @@
+name            = "dila-webhook"
+main            = "index.js"
+compatibility_date = "2024-06-01"
+
+# Set these via: npx wrangler secret put BACKEND_URL
+# and:           npx wrangler secret put API_KEY
+# OR in Cloudflare Dashboard → Workers → Settings → Variables
+
+[vars]
+# BACKEND_URL = "https://your-app.railway.app"   ← set as secret instead
