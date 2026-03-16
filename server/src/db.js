@@ -4,7 +4,7 @@ async function connect() {
   // Use MONGODB_URI from env, or fall back to local MongoDB
   const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/dila";
   try {
-    await mongoose.connect(uri);
+    await mongoose.connect(uri, { family: 4 });
     console.log(`[DB] Connected to MongoDB: ${uri.split("@").pop() || uri}`);
   } catch (err) {
     if (!process.env.MONGODB_URI) {
