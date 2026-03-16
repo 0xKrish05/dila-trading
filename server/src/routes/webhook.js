@@ -22,10 +22,13 @@ module.exports = function (io) {
   router.post("/", async (req, res) => {
     const serverReceivedAt = Date.now();
 
-    // Optional API-key auth
+    // Optional API-key auth (header OR ?key= query param for TradingView)
     const secret = process.env.WEBHOOK_SECRET;
-    if (secret && req.headers["x-api-key"] !== secret) {
-      return res.status(403).json({ error: "Unauthorized" });
+    if (secret) {
+      const provided = req.headers["x-api-key"] || req.query.key;
+      if (provided !== secret) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
     }
 
     const { signal, ticker, price, time: signalTime, workerReceivedAt } = req.body;
