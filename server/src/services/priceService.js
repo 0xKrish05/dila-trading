@@ -18,10 +18,53 @@ class PriceService {
     this.ws               = null;
   }
 
-  start(io) {
+  async start(io) {
     this.io = io;
+    // Fetch current price via REST immediately so dashboard never shows ——
+    await this._bootstrapPrice();
     this._connect();
     console.log("[PRICE] Price service started");
+  }
+
+  async _bootstrapPrice() {
+    try {
+      // Current price
+      const r1 = await fetch(
+        "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const { price } = await r1.json();
+      this.currentPrice = parseFloat(price);
+
+      // Current 5m candle open
+      const r2 = await fetch(
+        "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=1",
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const [[openTime, open]] = await r2.json();
+      this.candle5mOpen     = parseFloat(open);
+      this.candle5mOpenTime = openTime;
+
+      const move         = (this.currentPrice - this.candle5mOpen) / this.candle5mOpen;
+      this.currentProbUp = 1 / (1 + Math.exp(-move * 80));
+
+      const probUp = parseFloat(this.currentProbUp.toFixed(4));
+      polymarketService.updateFromProbUp(probUp);
+
+      console.log(`[PRICE] Bootstrap: $${this.currentPrice} candle_open:$${this.candle5mOpen} probUp:${probUp}`);
+
+      // Emit immediately so connected clients see price right away
+      if (this.io) {
+        this.io.emit("price_update", {
+          price:     this.currentPrice,
+          probUp,
+          polyCents: polymarketService.getLastPrices(),
+          timestamp: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.warn("[PRICE] Bootstrap failed:", err.message);
+    }
   }
 
   getCurrentPrice() { return this.currentPrice || 0; }

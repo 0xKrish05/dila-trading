@@ -56,6 +56,17 @@ io.on("connection", async (socket) => {
       portfolio, trades, openTrades,
       cycle: cycleManager.getState(),
     });
+
+    // Send current price immediately so dashboard never shows ——
+    const p = priceService.getCurrentPrice();
+    if (p) {
+      socket.emit("price_update", {
+        price:     p,
+        probUp:    priceService.getCurrentProb(),
+        polyCents: polymarketService.getLastPrices(),
+        timestamp: Date.now(),
+      });
+    }
   } catch (e) {
     console.error("[WS] Initial state error:", e.message);
   }
