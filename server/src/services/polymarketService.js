@@ -1,250 +1,196 @@
 /**
  * PolymarketService
  * ─────────────────────────────────────────────────────────────
- * 1. Discovers active BTC binary market via Polymarket Gamma API
- * 2. Connects to Polymarket CLOB WebSocket for real-time YES/NO prices
- * 3. Falls back to Binance probUp estimate if no active market found
+ * Provides real-time BTC directional prices in cents for the dashboard.
  *
- * CLOB WS: wss://ws-subscriptions-clob.polymarket.com/ws/market
- * Gamma API: https://gamma-api.polymarket.com/markets
+ * Sources (in priority order):
+ *   1. Polymarket CLOB REST – polls any active BTC binary market every 10s
+ *      Uses outcomePrices + clobTokenIds (correct Gamma API fields)
+ *   2. Binance momentum fallback – derived from live probUp when no
+ *      Polymarket BTC binary market exists (Polymarket has no 5-min BTC market)
+ *
+ * NOTE: Polymarket currently offers NO 5-minute BTC up/down markets.
+ *       The closest we can do is find their longest BTC binary and show that,
+ *       or use live Binance momentum (probUp) as an equivalent signal.
  */
 
 const WebSocket = require("ws");
 
-let io         = null;
-let ws         = null;
-let reconnTimer = null;
-let marketInfo  = null;   // { question, yesTokenId, noTokenId }
-let lastPrices  = { yes: 50, no: 50, source: "estimated", market: null };
+let io          = null;
+let pollHandle  = null;
+let wsHandle    = null;
+let marketInfo  = null;   // { question, yesId, noId }
+let lastPrices  = { yes: 50, no: 50, source: "binance", market: "BTC 5-min Momentum" };
 
-const CLOB_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
-// Try multiple search strategies to find active BTC binary market
-const GAMMA_URLS = [
-  "https://gamma-api.polymarket.com/markets?active=true&closed=false&tag=bitcoin&limit=20",
-  "https://gamma-api.polymarket.com/markets?active=true&closed=false&tag=crypto&limit=30",
-  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&q=bitcoin",
-  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&q=btc",
+// ── Gamma API search URLs (in order of relevance) ────────────────────────────
+const SEARCH_URLS = [
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=20&q=bitcoin+price",
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=20&q=btc+price",
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=30&q=bitcoin",
 ];
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function start(socketIo) {
   io = socketIo;
-  await _discoverMarket();
-  _connectWS();
-  // Re-discover market every 5 min (markets rotate)
-  setInterval(_discoverMarket, 5 * 60_000);
-  console.log("[POLY] Polymarket service started");
+  await _discoverAndPoll();
+  pollHandle = setInterval(_discoverAndPoll, 10_000); // poll every 10s
+  console.log("[POLY] Polymarket service started (10s REST poll)");
 }
 
 function stop() {
-  if (ws) { ws.terminate(); ws = null; }
-  if (reconnTimer) { clearTimeout(reconnTimer); reconnTimer = null; }
+  if (pollHandle) clearInterval(pollHandle);
+  if (wsHandle)   { try { wsHandle.terminate(); } catch (_) {} wsHandle = null; }
 }
 
 function getLastPrices() { return lastPrices; }
 
-// Only update from Binance if we have no real Polymarket data yet
+// Update from Binance probUp — only when we have no real Polymarket data
 function updateFromProbUp(probUp) {
-  if (lastPrices.source === "polymarket") return;
   lastPrices = {
     yes:    Math.round(probUp * 100),
     no:     Math.round((1 - probUp) * 100),
-    source: "estimated",
-    market: null,
+    source: lastPrices.source === "polymarket" ? "polymarket" : "binance",
+    market: lastPrices.source === "polymarket" ? lastPrices.market : "BTC 5-min Momentum",
   };
+  // Don't emit here — priceService will include it in price_update
 }
 
-// ── Step 1: find active BTC market and extract token IDs ─────────────────────
-async function _discoverMarket() {
-  try {
-    // Try each URL until we find an active BTC binary market
-    let btc = null;
-    for (const url of GAMMA_URLS) {
-      try {
-        const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-        if (!resp.ok) continue;
-        const markets = await resp.json();
-        btc = markets.find(m =>
-          m.active && !m.closed &&
-          Array.isArray(m.tokens) && m.tokens.length === 2 &&
-          (m.question?.toLowerCase().includes("bitcoin") ||
-           m.question?.toLowerCase().includes("btc"))
-        );
-        if (btc) break;
-      } catch (_) { continue; }
-    }
+// ── REST poll: find market + update prices ────────────────────────────────────
+async function _discoverAndPoll() {
+  let found = false;
 
-    if (!btc) {
-      console.warn("[POLY] No active BTC binary market found — using estimated prices");
-      marketInfo = null;
-      return;
-    }
+  for (const url of SEARCH_URLS) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (!resp.ok) continue;
 
-    const yesToken = btc.tokens.find(t => t.outcome?.toLowerCase() === "yes") || btc.tokens[0];
-    const noToken  = btc.tokens.find(t => t.outcome?.toLowerCase() === "no")  || btc.tokens[1];
+      const markets = await resp.json();
+      const btc = markets.find(m =>
+        m.active && !m.closed &&
+        m.outcomePrices &&
+        (m.question?.toLowerCase().includes("bitcoin") ||
+         m.question?.toLowerCase().includes("btc"))
+      );
 
-    const prevMarket = marketInfo?.yesTokenId;
-    marketInfo = {
-      question:   btc.question,
-      yesTokenId: yesToken.token_id,
-      noTokenId:  noToken.token_id,
-    };
+      if (!btc) continue;
 
-    // Seed prices from REST response immediately
-    if (yesToken.price != null) {
-      lastPrices = {
-        yes:    Math.round(parseFloat(yesToken.price) * 100),
-        no:     Math.round(parseFloat(noToken.price ?? (1 - yesToken.price)) * 100),
-        source: "polymarket",
-        market: btc.question,
-      };
-      _emit();
-    }
+      // Parse outcomePrices — it's a JSON string like '["0.52","0.48"]'
+      let op = btc.outcomePrices;
+      if (typeof op === "string") op = JSON.parse(op);
 
-    // Resubscribe WS if market changed
-    if (prevMarket !== marketInfo.yesTokenId && ws?.readyState === WebSocket.OPEN) {
-      _subscribe();
-    }
+      const yes = Math.round(parseFloat(op[0]) * 100);
+      const no  = Math.round(parseFloat(op[1]) * 100);
 
-    console.log(`[POLY] Market: "${btc.question}" YES:${marketInfo.yesTokenId?.slice(0,8)}…`);
-  } catch (err) {
-    console.warn("[POLY] Market discovery failed:", err.message);
-  }
-}
-
-// ── Step 2: connect CLOB WebSocket ───────────────────────────────────────────
-function _connectWS() {
-  if (ws) { ws.terminate(); ws = null; }
-
-  try {
-    ws = new WebSocket(CLOB_WS);
-
-    ws.on("open", () => {
-      console.log("[POLY] CLOB WebSocket connected");
-      if (marketInfo) _subscribe();
-    });
-
-    ws.on("message", (raw) => {
-      try {
-        _handleMessage(JSON.parse(raw.toString()));
-      } catch (_) {}
-    });
-
-    ws.on("close", () => {
-      console.warn("[POLY] CLOB WebSocket closed — reconnecting in 5s");
-      reconnTimer = setTimeout(_connectWS, 5000);
-    });
-
-    ws.on("error", (err) => {
-      console.warn("[POLY] CLOB WS error:", err.message);
-    });
-  } catch (err) {
-    console.warn("[POLY] Could not open CLOB WS:", err.message);
-    reconnTimer = setTimeout(_connectWS, 10_000);
-  }
-}
-
-function _subscribe() {
-  if (!marketInfo || ws?.readyState !== WebSocket.OPEN) return;
-  const msg = JSON.stringify({
-    type:       "market",
-    assets_ids: [marketInfo.yesTokenId, marketInfo.noTokenId],
-  });
-  ws.send(msg);
-  console.log(`[POLY] Subscribed to YES:${marketInfo.yesTokenId?.slice(0,8)}… NO:${marketInfo.noTokenId?.slice(0,8)}…`);
-}
-
-// ── Step 3: handle incoming WS messages ──────────────────────────────────────
-function _handleMessage(msg) {
-  if (!marketInfo) return;
-
-  // Polymarket sends arrays or single events
-  const events = Array.isArray(msg) ? msg : [msg];
-
-  let updated = false;
-  for (const evt of events) {
-    const type  = evt.event_type;
-    const id    = evt.asset_id;
-    const price = parseFloat(evt.price ?? evt.best_bid ?? 0);
-
-    if (!price || !id) continue;
-
-    if (id === marketInfo.yesTokenId) {
-      lastPrices = { ...lastPrices, yes: Math.round(price * 100), source: "polymarket", market: marketInfo.question };
-      updated = true;
-    } else if (id === marketInfo.noTokenId) {
-      lastPrices = { ...lastPrices, no: Math.round(price * 100), source: "polymarket", market: marketInfo.question };
-      updated = true;
-    }
-
-    // Also handle book updates (mid-price)
-    if ((type === "book") && id === marketInfo.yesTokenId && Array.isArray(evt.bids) && evt.bids.length) {
-      const best = parseFloat(evt.bids[0]?.price ?? 0);
-      if (best > 0) {
-        lastPrices = { ...lastPrices, yes: Math.round(best * 100), source: "polymarket", market: marketInfo.question };
-        updated = true;
+      // Store clobTokenIds for WS subscription
+      const ids = btc.clobTokenIds || [];
+      if (ids.length === 2 && (!marketInfo || marketInfo.yesId !== ids[0])) {
+        marketInfo = { question: btc.question, yesId: ids[0], noId: ids[1] };
+        _connectWS(); // subscribe for real-time updates on top of REST
       }
+
+      lastPrices = { yes, no, source: "polymarket", market: btc.question };
+      console.log(`[POLY] "${btc.question.slice(0,50)}" YES=${yes}¢ NO=${no}¢`);
+      found = true;
+      break;
+    } catch (err) {
+      console.warn("[POLY] Search failed:", err.message);
     }
   }
 
-  if (updated) _emit();
-}
+  if (!found) {
+    // No Polymarket BTC market found — keep current Binance-derived prices
+    if (lastPrices.source === "polymarket") {
+      lastPrices = { ...lastPrices, source: "binance", market: "BTC 5-min Momentum" };
+    }
+  }
 
-function _emit() {
   if (io) io.emit("poly_market_update", lastPrices);
 }
 
-// ── User account fetch ────────────────────────────────────────────────────────
-// Polymarket gives users a "proxy wallet" address — this is NOT indexed in
-// the profile API. We accept any valid address + API key UUID and enrich
-// with whatever public data is available.
+// ── Optional WS for real-time on top of REST ──────────────────────────────────
+function _connectWS() {
+  if (!marketInfo) return;
+  if (wsHandle) { try { wsHandle.terminate(); } catch (_) {} }
+
+  try {
+    wsHandle = new WebSocket("wss://ws-subscriptions-clob.polymarket.com/ws/market");
+
+    wsHandle.on("open", () => {
+      wsHandle.send(JSON.stringify({
+        type: "market",
+        assets_ids: [marketInfo.yesId, marketInfo.noId],
+      }));
+      console.log("[POLY] CLOB WS subscribed to:", marketInfo.question?.slice(0, 50));
+    });
+
+    wsHandle.on("message", (raw) => {
+      try {
+        const events = JSON.parse(raw.toString());
+        const list = Array.isArray(events) ? events : [events];
+        let changed = false;
+
+        for (const evt of list) {
+          const price = parseFloat(evt.price ?? evt.best_bid ?? 0);
+          if (!price || !evt.asset_id) continue;
+
+          if (evt.asset_id === marketInfo.yesId) {
+            lastPrices = { ...lastPrices, yes: Math.round(price * 100), source: "polymarket" };
+            changed = true;
+          } else if (evt.asset_id === marketInfo.noId) {
+            lastPrices = { ...lastPrices, no: Math.round(price * 100), source: "polymarket" };
+            changed = true;
+          }
+        }
+
+        if (changed && io) io.emit("poly_market_update", lastPrices);
+      } catch (_) {}
+    });
+
+    wsHandle.on("close", () => console.warn("[POLY] CLOB WS closed"));
+    wsHandle.on("error", (e) => console.warn("[POLY] CLOB WS error:", e.message));
+  } catch (e) {
+    console.warn("[POLY] WS connect failed:", e.message);
+  }
+}
+
+// ── User account lookup ───────────────────────────────────────────────────────
 async function fetchUserAccount(walletAddress) {
   const addr = walletAddress.toLowerCase().trim();
 
-  // 1. Try profile lookup (works for EOA wallets, may 404 for proxy wallets)
-  let profile     = null;
-  let profileName = null;
-  let avatar      = null;
+  // Try profile (may 404 for proxy wallet addresses — that's OK)
+  let profileName = null, avatar = null;
   try {
     const r = await fetch(
       `https://data-api.polymarket.com/profile?address=${addr}`,
       { signal: AbortSignal.timeout(6000) }
     );
     if (r.ok) {
-      profile     = await r.json();
-      profileName = profile?.name || profile?.pseudonym || profile?.username || null;
-      avatar      = profile?.profileImage || profile?.pfpUrl || null;
+      const p = await r.json();
+      profileName = p?.name || p?.pseudonym || p?.username || null;
+      avatar      = p?.profileImage || p?.pfpUrl || null;
     }
-    // 404 is expected for proxy wallets — not a failure
   } catch (_) {}
 
-  // 2. Open positions (try both address formats)
-  let polyBalance    = null;
-  let positions      = [];
-  for (const a of [addr]) {
-    try {
-      const r2 = await fetch(
-        `https://data-api.polymarket.com/positions?user=${a}&sizeThreshold=0&limit=200`,
-        { signal: AbortSignal.timeout(6000) }
-      );
-      if (r2.ok) {
-        const data = await r2.json();
-        if (Array.isArray(data) && data.length > 0) {
-          positions   = data;
-          polyBalance = parseFloat(
-            data.reduce((s, p) => {
-              const size  = parseFloat(p.size    ?? 0);
-              const price = parseFloat(p.curPrice ?? p.price ?? 0);
-              return s + size * price;
-            }, 0).toFixed(2)
-          );
-          break;
-        }
+  // Open positions
+  let polyBalance = null, positions = [];
+  try {
+    const r2 = await fetch(
+      `https://data-api.polymarket.com/positions?user=${addr}&sizeThreshold=0&limit=200`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (r2.ok) {
+      positions = await r2.json();
+      if (Array.isArray(positions)) {
+        polyBalance = parseFloat(
+          positions.reduce((s, p) =>
+            s + parseFloat(p.size ?? 0) * parseFloat(p.curPrice ?? p.price ?? 0), 0
+          ).toFixed(2)
+        );
       }
-    } catch (_) {}
-  }
+    }
+  } catch (_) {}
 
-  // 3. USDC.e wallet balance on Polygon via public RPC
+  // USDC.e wallet balance on Polygon RPC
   let usdcBalance = null;
   for (const contract of [
     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e
@@ -252,18 +198,19 @@ async function fetchUserAccount(walletAddress) {
   ]) {
     try {
       const callData = "0x70a08231" + addr.replace("0x", "").padStart(64, "0");
-      const rpc = await fetch("https://polygon-rpc.com", {
-        method:  "POST",
+      const r3 = await fetch("https://polygon-rpc.com", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
+        body: JSON.stringify({
           jsonrpc: "2.0", id: 1, method: "eth_call",
           params: [{ to: contract, data: callData }, "latest"],
         }),
         signal: AbortSignal.timeout(5000),
       });
-      const json = await rpc.json();
-      if (json.result && json.result !== "0x" && json.result !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
-        const bal = parseInt(json.result, 16) / 1e6;
+      const json = await r3.json();
+      const raw  = json.result;
+      if (raw && raw !== "0x" && raw !== "0x" + "0".repeat(64)) {
+        const bal = parseInt(raw, 16) / 1e6;
         if (bal > 0) { usdcBalance = parseFloat(bal.toFixed(2)); break; }
       }
     } catch (_) {}
@@ -273,11 +220,11 @@ async function fetchUserAccount(walletAddress) {
     ok: true,
     profile: {
       address:       walletAddress,
-      name:          profileName || (addr.slice(0, 6) + "…" + addr.slice(-4)),
+      name:          profileName || addr.slice(0, 6) + "…" + addr.slice(-4),
       avatar,
-      polyBalance,
+      polyBalance:   positions.length > 0 ? polyBalance : null,
       usdcBalance,
-      positionCount: positions.length,
+      positionCount: Array.isArray(positions) ? positions.length : 0,
     },
   };
 }

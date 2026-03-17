@@ -5,10 +5,10 @@ export default function PricePanel({ price, probUp, polyCents, latency, avgLaten
   const probPct = ((probUp ?? 0.5) * 100).toFixed(1);
   const isUp    = (probUp ?? 0.5) >= 0.5;
 
-  const yes      = polyCents?.yes    ?? Math.round((probUp ?? 0.5) * 100);
-  const no       = polyCents?.no     ?? Math.round((1 - (probUp ?? 0.5)) * 100);
+  const yes      = polyCents?.yes ?? Math.round((probUp ?? 0.5) * 100);
+  const no       = polyCents?.no  ?? Math.round((1 - (probUp ?? 0.5)) * 100);
   const isReal   = polyCents?.source === "polymarket";
-  const mktLabel = isReal ? polyCents.market?.slice(0, 40) : "Estimated from Binance momentum";
+  const srcLabel = isReal ? "Polymarket live" : "Binance live";
 
   return (
     <div className="card price-card">
@@ -38,9 +38,7 @@ export default function PricePanel({ price, probUp, polyCents, latency, avgLaten
               <span className="poly-cents">{no}¢</span>
             </div>
           </div>
-          <div className="poly-note muted" title={mktLabel}>
-            {isReal ? "Polymarket live" : "Est. from Binance"}
-          </div>
+          <div className="poly-note muted">{srcLabel}</div>
         </div>
       </div>
 

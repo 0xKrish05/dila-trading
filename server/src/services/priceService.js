@@ -63,11 +63,16 @@ class PriceService {
   _onTrade(data) {
     this.currentPrice = parseFloat(data.p);
 
-    // Simulate Polymarket probability from candle move
-    if (this.candle5mOpen) {
-      const move          = (this.currentPrice - this.candle5mOpen) / this.candle5mOpen;
-      this.currentProbUp  = 1 / (1 + Math.exp(-move * 60));
+    // Bootstrap candle open from first tick if kline hasn't fired yet
+    if (!this.candle5mOpen) {
+      this.candle5mOpen     = this.currentPrice;
+      this.candle5mOpenTime = Math.floor(Date.now() / 300000) * 300000;
+      console.log(`[PRICE] Bootstrapped candle open: $${this.candle5mOpen}`);
     }
+
+    // Derive directional probability from 5m candle move
+    const move         = (this.currentPrice - this.candle5mOpen) / this.candle5mOpen;
+    this.currentProbUp = 1 / (1 + Math.exp(-move * 80)); // 80 = sensitive to small moves
 
     if (this.io) {
       const probUp = parseFloat(this.currentProbUp.toFixed(4));
