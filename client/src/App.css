@@ -371,6 +371,18 @@ body {
   padding: 8px 12px; font-size: .82rem;
 }
 
+/* ── Credentials how-to guide ───────────────────────────────────────────── */
+.creds-how-to {
+  background: #0d1f0d; border: 1px solid #2ea043;
+  border-radius: 7px; padding: 10px 14px; margin-bottom: 14px;
+}
+.creds-step { font-size: .75rem; font-weight: 700; color: var(--green); display: block; margin-bottom: 6px; }
+.creds-steps-list {
+  list-style: decimal; padding-left: 18px;
+  font-size: .78rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px;
+}
+.creds-steps-list strong { color: var(--text); }
+
 /* ── Polymarket dot in modal ────────────────────────────────────────────── */
 .poly-dot {
   width: 10px; height: 10px; border-radius: 50%;

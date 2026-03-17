@@ -3,20 +3,14 @@ import { useState } from "react";
 export default function ModeToggle({ mode, onModeChange }) {
   const isMainnet = mode === "mainnet";
 
-  const [showConfirm,  setShowConfirm]  = useState(false);
-  const [showForm,     setShowForm]     = useState(false);
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState("");
-  const [creds, setCreds] = useState({
-    walletAddress: "",
-    apiKey:        "",
-    apiSecret:     "",
-    passphrase:    "",
-  });
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showForm,    setShowForm]    = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
+  const [creds, setCreds] = useState({ walletAddress: "", apiKey: "" });
 
   const handleToggle = () => {
     if (isMainnet) {
-      // Switch back to sim — no confirmation needed
       fetch("/api/mode", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,7 +45,7 @@ export default function ModeToggle({ mode, onModeChange }) {
       }
       setShowForm(false);
       onModeChange("mainnet", data.profile);
-    } catch (err) {
+    } catch {
       setError("Network error — try again");
     }
     setLoading(false);
@@ -76,10 +70,10 @@ export default function ModeToggle({ mode, onModeChange }) {
             <h2 className="modal-title">Switch to Mainnet Trading?</h2>
             <p className="modal-body">
               You are about to switch from <strong>Simulated</strong> mode to{" "}
-              <strong style={{ color: "#f0883e" }}>Real Mainnet</strong> trading on Polymarket.
+              <strong style={{ color: "#f0883e" }}>Real Mainnet</strong> on Polymarket.
               <br /><br />
-              Real funds will be used. All trade positions and sizing remain the same as in simulation.
-              Confirm only if you understand the risks.
+              Real funds will be at risk. Strategy logic and sizing remain identical to simulation.
+              Only continue if you understand the risks.
             </p>
             <div className="modal-actions">
               <button className="btn-modal cancel" onClick={() => setShowConfirm(false)}>Cancel</button>
@@ -96,7 +90,16 @@ export default function ModeToggle({ mode, onModeChange }) {
             <h2 className="modal-title">
               <span className="poly-dot" /> Connect Polymarket Account
             </h2>
-            <p className="modal-sub">Enter your Polymarket credentials. We verify your account before switching modes.</p>
+
+            <div className="creds-how-to">
+              <span className="creds-step">How to get credentials:</span>
+              <ol className="creds-steps-list">
+                <li>Go to <strong>polymarket.com</strong> and connect your wallet</li>
+                <li>Open <strong>Settings → API Keys</strong></li>
+                <li>Click <strong>Create Relayer API Key</strong></li>
+                <li>Copy the <strong>Address</strong> and <strong>API Key</strong> shown</li>
+              </ol>
+            </div>
 
             <form className="creds-form" onSubmit={handleSubmit}>
               <label className="cred-label">
@@ -104,43 +107,24 @@ export default function ModeToggle({ mode, onModeChange }) {
                 <input
                   className="cred-input"
                   type="text"
-                  placeholder="0x..."
+                  placeholder="0x2be09409411eaa9e7366bdf..."
                   value={creds.walletAddress}
-                  onChange={e => setCreds(c => ({ ...c, walletAddress: e.target.value }))}
+                  onChange={e => setCreds(c => ({ ...c, walletAddress: e.target.value.trim() }))}
                   required
+                  spellCheck={false}
                 />
               </label>
 
               <label className="cred-label">
-                API Key
+                API Key <span className="req">*</span>
                 <input
                   className="cred-input"
                   type="text"
-                  placeholder="Polymarket CLOB API key"
+                  placeholder="019cfa0f-376a-7af1-9a1e-..."
                   value={creds.apiKey}
-                  onChange={e => setCreds(c => ({ ...c, apiKey: e.target.value }))}
-                />
-              </label>
-
-              <label className="cred-label">
-                API Secret
-                <input
-                  className="cred-input"
-                  type="password"
-                  placeholder="API secret"
-                  value={creds.apiSecret}
-                  onChange={e => setCreds(c => ({ ...c, apiSecret: e.target.value }))}
-                />
-              </label>
-
-              <label className="cred-label">
-                Passphrase
-                <input
-                  className="cred-input"
-                  type="password"
-                  placeholder="API passphrase"
-                  value={creds.passphrase}
-                  onChange={e => setCreds(c => ({ ...c, passphrase: e.target.value }))}
+                  onChange={e => setCreds(c => ({ ...c, apiKey: e.target.value.trim() }))}
+                  required
+                  spellCheck={false}
                 />
               </label>
 
@@ -149,7 +133,7 @@ export default function ModeToggle({ mode, onModeChange }) {
               <div className="modal-actions" style={{ marginTop: 16 }}>
                 <button type="button" className="btn-modal cancel" onClick={() => setShowForm(false)}>Cancel</button>
                 <button type="submit" className="btn-modal confirm" disabled={loading}>
-                  {loading ? "Verifying…" : "Verify & Switch to Mainnet"}
+                  {loading ? "Verifying account…" : "Verify & Switch to Mainnet"}
                 </button>
               </div>
             </form>

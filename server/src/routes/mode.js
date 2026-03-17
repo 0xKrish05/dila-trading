@@ -43,10 +43,8 @@ module.exports = function (io) {
         return res.status(401).json({ error: result.error });
       }
 
-      // Store additional API credentials (for future CLOB order signing)
-      result.profile.apiKey     = credentials.apiKey     || null;
-      result.profile.apiSecret  = credentials.apiSecret  || null;
-      result.profile.passphrase = credentials.passphrase || null;
+      // Store API key for future CLOB order signing
+      result.profile.apiKey = credentials.apiKey || null;
 
       mainnetProfile = result.profile;
     } else {
