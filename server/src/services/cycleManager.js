@@ -5,8 +5,8 @@
  *
  * Cycle stages:
  *   WAITING  → new cycle just started (first second)
- *   ACTIVE   → trading window open  (4:59 → 2:00 remaining)
- *   CLOSING  → last 2 minutes, no new trades accepted
+ *   ACTIVE   → trading window open  (4:59 → 0:20 remaining)
+ *   CLOSING  → last 20 seconds, no new trades accepted
  *
  * Emits every 500ms via Socket.IO: 'cycle_tick'
  * Emits via Node EventEmitter on stage change: 'stage_change'
@@ -58,8 +58,8 @@ class CycleManager extends EventEmitter {
 
     let stage;
     if (remaining >= 299)      stage = "WAITING";   // first second: new cycle
-    else if (remaining > 120)  stage = "ACTIVE";    // 4:59 → 2:00
-    else                       stage = "CLOSING";   // last 2 min
+    else if (remaining > 20)   stage = "ACTIVE";    // 4:59 → 0:20
+    else                       stage = "CLOSING";   // last 20s
 
     return {
       cycleId:      `C${epochSlot}`,

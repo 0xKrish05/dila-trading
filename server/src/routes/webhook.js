@@ -32,13 +32,21 @@ module.exports = function (io) {
       }
     }
 
-    const { signal, ticker, price, time: signalTime, workerReceivedAt } = req.body;
+    const body = req.body;
 
-    if (!signal || !["BUY", "SELL"].includes(signal.toUpperCase())) {
-      return res.status(400).json({ error: "Invalid signal — must be BUY or SELL" });
+    // Accept: signal OR action field, buy/sell OR BUY/SELL
+    const rawSignal = (body.signal || body.action || "").toString().toUpperCase();
+    const { ticker, price, time: signalTime, workerReceivedAt } = body;
+
+    if (!["BUY", "SELL"].includes(rawSignal)) {
+      console.log(`[WEBHOOK] Bad signal field — body keys: ${Object.keys(body).join(",")}`);
+      return res.status(400).json({
+        error: "Invalid signal. Send JSON with signal or action field = buy/sell",
+        received: body,
+      });
     }
 
-    const normalised = signal.toUpperCase();
+    const normalised = rawSignal;
     const latencyMs  = serverReceivedAt - (workerReceivedAt || serverReceivedAt);
 
     console.log(
