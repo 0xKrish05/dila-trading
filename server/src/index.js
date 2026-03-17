@@ -77,10 +77,10 @@ io.on("connection", async (socket) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-db.connect().then(() => {
-  priceService.start(io);
+db.connect().then(async () => {
+  await priceService.start(io);           // await so price is ready before WS clients connect
   cycleManager.start(io);
-  polymarketService.start(io);  // real-time Polymarket BTC market prices
+  polymarketService.start(io);
 
   // Close all open trades when cycle enters CLOSING stage (2 min remaining)
   const tradeEngine = require("./services/tradeEngine");

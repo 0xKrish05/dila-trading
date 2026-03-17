@@ -12,8 +12,9 @@
  * }
  */
 
-const express     = require("express");
-const tradeEngine = require("../services/tradeEngine");
+const express      = require("express");
+const tradeEngine  = require("../services/tradeEngine");
+const cycleManager = require("../services/cycleManager");
 
 module.exports = function (io) {
   const router = express.Router();
@@ -56,17 +57,32 @@ module.exports = function (io) {
       latencyMs,
     });
 
+    const cycle = cycleManager.getState();
+
     // Execute trade
     const trade = await tradeEngine.onSignal(normalised, {
       signalTime:       signalTime ? parseInt(signalTime) : serverReceivedAt,
       workerReceivedAt: workerReceivedAt ? parseInt(workerReceivedAt) : serverReceivedAt,
     });
 
+    const placed = !!trade;
+    const reason = !placed
+      ? (cycle.stage !== "ACTIVE"
+          ? `Signal rejected — cycle stage is ${cycle.stage} (${cycle.remaining}s remaining). Trades only accepted during ACTIVE stage.`
+          : "Signal rejected — insufficient margin or zero stake")
+      : null;
+
+    if (!placed) console.log(`[WEBHOOK] ⚠ Not placed: ${reason}`);
+
     return res.json({
-      ok:            true,
-      tradeId:       trade?._id ?? null,
-      tradeNum:      trade?.tradeNum ?? null,
-      executionMs:   Date.now() - serverReceivedAt,
+      ok:          true,
+      placed,
+      tradeId:     trade?._id    ?? null,
+      tradeNum:    trade?.tradeNum ?? null,
+      cycleStage:  cycle.stage,
+      remaining:   cycle.remaining,
+      reason,
+      executionMs: Date.now() - serverReceivedAt,
     });
   });
 

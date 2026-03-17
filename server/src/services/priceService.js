@@ -20,8 +20,10 @@ class PriceService {
 
   async start(io) {
     this.io = io;
-    // Fetch current price via REST immediately so dashboard never shows ——
+    // Fetch current price immediately via REST — never shows ——
     await this._bootstrapPrice();
+    // REST poll every 5s as fallback when WS is slow/down
+    this._pollHandle = setInterval(() => this._restPoll(), 5000);
     this._connect();
     console.log("[PRICE] Price service started");
   }
@@ -104,6 +106,7 @@ class PriceService {
   }
 
   _onTrade(data) {
+    this._lastWsTick  = Date.now();
     this.currentPrice = parseFloat(data.p);
 
     // Bootstrap candle open from first tick if kline hasn't fired yet
@@ -131,6 +134,29 @@ class PriceService {
 
     // Monitor every tick (engine throttles internally)
     tradeEngine.monitorOpenTrades(this.currentProbUp);
+  }
+
+  // REST fallback — keeps price fresh if WS is silent
+  async _restPoll() {
+    // Only poll if WS hasn't sent a tick in the last 6s
+    if (this._lastWsTick && Date.now() - this._lastWsTick < 6000) return;
+    try {
+      const r = await fetch(
+        "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+        { signal: AbortSignal.timeout(3000) }
+      );
+      const { price } = await r.json();
+      this.currentPrice = parseFloat(price);
+      if (!this.candle5mOpen) await this._bootstrapPrice();
+      if (this.io) {
+        const probUp = parseFloat(this.currentProbUp.toFixed(4));
+        this.io.emit("price_update", {
+          price: this.currentPrice, probUp,
+          polyCents: polymarketService.getLastPrices(),
+          timestamp: Date.now(),
+        });
+      }
+    } catch (_) {}
   }
 
   _onKline(data) {
