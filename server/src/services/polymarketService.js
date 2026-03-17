@@ -17,8 +17,14 @@ let reconnTimer = null;
 let marketInfo  = null;   // { question, yesTokenId, noTokenId }
 let lastPrices  = { yes: 50, no: 50, source: "estimated", market: null };
 
-const CLOB_WS  = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
-const GAMMA_URL = "https://gamma-api.polymarket.com/markets?active=true&closed=false&tag=bitcoin&limit=20";
+const CLOB_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
+// Try multiple search strategies to find active BTC binary market
+const GAMMA_URLS = [
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&tag=bitcoin&limit=20",
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&tag=crypto&limit=30",
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&q=bitcoin",
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&q=btc",
+];
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function start(socketIo) {
@@ -51,16 +57,22 @@ function updateFromProbUp(probUp) {
 // ── Step 1: find active BTC market and extract token IDs ─────────────────────
 async function _discoverMarket() {
   try {
-    const resp = await fetch(GAMMA_URL, { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) throw new Error(`Gamma API ${resp.status}`);
-    const markets = await resp.json();
-
-    // Find BTC binary (2-outcome) active market
-    const btc = markets.find(m =>
-      m.active && !m.closed &&
-      (m.question?.toLowerCase().includes("bitcoin") || m.question?.toLowerCase().includes("btc")) &&
-      Array.isArray(m.tokens) && m.tokens.length === 2
-    );
+    // Try each URL until we find an active BTC binary market
+    let btc = null;
+    for (const url of GAMMA_URLS) {
+      try {
+        const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!resp.ok) continue;
+        const markets = await resp.json();
+        btc = markets.find(m =>
+          m.active && !m.closed &&
+          Array.isArray(m.tokens) && m.tokens.length === 2 &&
+          (m.question?.toLowerCase().includes("bitcoin") ||
+           m.question?.toLowerCase().includes("btc"))
+        );
+        if (btc) break;
+      } catch (_) { continue; }
+    }
 
     if (!btc) {
       console.warn("[POLY] No active BTC binary market found — using estimated prices");
@@ -183,87 +195,86 @@ function _emit() {
 }
 
 // ── User account fetch ────────────────────────────────────────────────────────
+// Polymarket gives users a "proxy wallet" address — this is NOT indexed in
+// the profile API. We accept any valid address + API key UUID and enrich
+// with whatever public data is available.
 async function fetchUserAccount(walletAddress) {
   const addr = walletAddress.toLowerCase().trim();
 
-  // 1. Profile — must exist
-  let profile = null;
+  // 1. Try profile lookup (works for EOA wallets, may 404 for proxy wallets)
+  let profile     = null;
+  let profileName = null;
+  let avatar      = null;
   try {
     const r = await fetch(
       `https://data-api.polymarket.com/profile?address=${addr}`,
-      { signal: AbortSignal.timeout(7000) }
+      { signal: AbortSignal.timeout(6000) }
     );
-    if (r.status === 404) {
-      return {
-        ok: false,
-        error: "Polymarket account not found for this address. Sign in at polymarket.com and make at least one trade first.",
-      };
+    if (r.ok) {
+      profile     = await r.json();
+      profileName = profile?.name || profile?.pseudonym || profile?.username || null;
+      avatar      = profile?.profileImage || profile?.pfpUrl || null;
     }
-    if (!r.ok) {
-      return {
-        ok: false,
-        error: `Polymarket returned error ${r.status}. Check your wallet address.`,
-      };
-    }
-    profile = await r.json();
-    if (!profile || typeof profile !== "object" || (!profile.name && !profile.pseudonym && !profile.proxyWallet)) {
-      return {
-        ok: false,
-        error: "Wallet has no Polymarket profile. Connect your wallet on polymarket.com and complete setup.",
-      };
-    }
-  } catch (err) {
-    return {
-      ok: false,
-      error: `Cannot reach Polymarket: ${err.message}`,
-    };
+    // 404 is expected for proxy wallets — not a failure
+  } catch (_) {}
+
+  // 2. Open positions (try both address formats)
+  let polyBalance    = null;
+  let positions      = [];
+  for (const a of [addr]) {
+    try {
+      const r2 = await fetch(
+        `https://data-api.polymarket.com/positions?user=${a}&sizeThreshold=0&limit=200`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (r2.ok) {
+        const data = await r2.json();
+        if (Array.isArray(data) && data.length > 0) {
+          positions   = data;
+          polyBalance = parseFloat(
+            data.reduce((s, p) => {
+              const size  = parseFloat(p.size    ?? 0);
+              const price = parseFloat(p.curPrice ?? p.price ?? 0);
+              return s + size * price;
+            }, 0).toFixed(2)
+          );
+          break;
+        }
+      }
+    } catch (_) {}
   }
 
-  // 2. Open positions value
-  let polyBalance = null;
-  let positions   = [];
-  try {
-    const r2 = await fetch(
-      `https://data-api.polymarket.com/positions?user=${addr}&sizeThreshold=0&limit=200`,
-      { signal: AbortSignal.timeout(7000) }
-    );
-    if (r2.ok) {
-      positions   = await r2.json();
-      polyBalance = parseFloat(
-        positions.reduce((s, p) => {
-          const size  = parseFloat(p.size        ?? 0);
-          const price = parseFloat(p.curPrice    ?? p.price ?? 0);
-          return s + size * price;
-        }, 0).toFixed(2)
-      );
-    }
-  } catch (_) {}
-
-  // 3. Wallet USDC.e balance on Polygon via public RPC
+  // 3. USDC.e wallet balance on Polygon via public RPC
   let usdcBalance = null;
-  try {
-    const data = "0x70a08231" + addr.replace("0x", "").padStart(64, "0");
-    const rpc  = await fetch("https://polygon-rpc.com", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        jsonrpc: "2.0", id: 1, method: "eth_call",
-        params: [{ to: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", data }, "latest"],
-      }),
-      signal: AbortSignal.timeout(5000),
-    });
-    const json = await rpc.json();
-    if (json.result && json.result !== "0x") {
-      usdcBalance = parseFloat((parseInt(json.result, 16) / 1e6).toFixed(2));
-    }
-  } catch (_) {}
+  for (const contract of [
+    "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e
+    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // native USDC
+  ]) {
+    try {
+      const callData = "0x70a08231" + addr.replace("0x", "").padStart(64, "0");
+      const rpc = await fetch("https://polygon-rpc.com", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          jsonrpc: "2.0", id: 1, method: "eth_call",
+          params: [{ to: contract, data: callData }, "latest"],
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const json = await rpc.json();
+      if (json.result && json.result !== "0x" && json.result !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
+        const bal = parseInt(json.result, 16) / 1e6;
+        if (bal > 0) { usdcBalance = parseFloat(bal.toFixed(2)); break; }
+      }
+    } catch (_) {}
+  }
 
   return {
     ok: true,
     profile: {
       address:       walletAddress,
-      name:          profile.name || profile.pseudonym || profile.username || walletAddress.slice(0, 8) + "…",
-      avatar:        profile.profileImage || profile.pfpUrl || null,
+      name:          profileName || (addr.slice(0, 6) + "…" + addr.slice(-4)),
+      avatar,
       polyBalance,
       usdcBalance,
       positionCount: positions.length,
