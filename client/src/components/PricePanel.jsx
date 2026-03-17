@@ -1,16 +1,44 @@
 const fmt = (n, d = 2) =>
   Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export default function PricePanel({ price, probUp, latency, avgLatency, lastSignal }) {
+export default function PricePanel({ price, probUp, polyCents, latency, avgLatency, lastSignal }) {
   const probPct = ((probUp ?? 0.5) * 100).toFixed(1);
   const isUp    = (probUp ?? 0.5) >= 0.5;
+
+  const yes = polyCents?.yes ?? Math.round((probUp ?? 0.5) * 100);
+  const no  = polyCents?.no  ?? Math.round((1 - (probUp ?? 0.5)) * 100);
 
   return (
     <div className="card price-card">
       <div className="card-lbl">Live Market</div>
 
-      <div className="price-big">${price ? fmt(price) : "——"}</div>
-      <div className="price-sub muted">BTC / USDT (Binance)</div>
+      {/* Top row: BTC price + Polymarket box */}
+      <div className="price-top-row">
+        {/* BTC price */}
+        <div className="price-left">
+          <div className="price-big">${price ? fmt(price) : "——"}</div>
+          <div className="price-sub muted">BTC / USDT (Binance)</div>
+        </div>
+
+        {/* Polymarket share prices */}
+        <div className="poly-box">
+          <div className="poly-box-lbl">
+            <span className="poly-dot-sm" /> Polymarket Prices
+          </div>
+          <div className="poly-prices">
+            <div className="poly-price-item up">
+              <span className="poly-dir">▲ UP</span>
+              <span className="poly-cents">{yes}¢</span>
+            </div>
+            <div className="poly-divider" />
+            <div className="poly-price-item dn">
+              <span className="poly-dir">▼ DOWN</span>
+              <span className="poly-cents">{no}¢</span>
+            </div>
+          </div>
+          <div className="poly-note muted">YES / NO share price</div>
+        </div>
+      </div>
 
       {/* Prob bar */}
       <div className="prob-wrap">

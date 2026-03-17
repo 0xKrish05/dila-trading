@@ -69,9 +69,15 @@ class PriceService {
     }
 
     if (this.io) {
+      const probUp = parseFloat(this.currentProbUp.toFixed(4));
       this.io.emit("price_update", {
         price:     this.currentPrice,
-        probUp:    parseFloat(this.currentProbUp.toFixed(4)),
+        probUp,
+        // Polymarket-style share prices in cents
+        polyCents: {
+          yes: Math.round(probUp * 100),        // UP share price
+          no:  Math.round((1 - probUp) * 100),  // DOWN share price
+        },
         timestamp: Date.now(),
       });
     }

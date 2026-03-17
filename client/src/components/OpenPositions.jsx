@@ -1,5 +1,7 @@
-const fmtUSD = (n, d = 2) =>
+const fmtUSD  = (n, d = 2) =>
   "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+const fmtCents = (prob) => `${Math.round((prob ?? 0) * 100)}¢`;
 
 export default function OpenPositions({ trades }) {
   return (
@@ -15,9 +17,8 @@ export default function OpenPositions({ trades }) {
         <div className="open-list">
           {trades.map(t => {
             const prob    = t.currentProb ?? t.entryProb;
-            const probPct = (prob * 100).toFixed(1);
-            const toTarget = ((t.targetProb - prob) * 100).toFixed(1);
-            const toSL     = ((prob - t.stopLossProb) * 100).toFixed(1);
+            const toTarget = Math.round((t.targetProb - prob) * 100);
+            const toSL     = Math.round((prob - t.stopLossProb) * 100);
             const unrealPnl = parseFloat(
               (t.stake * (prob - t.entryProb) / t.entryProb).toFixed(4)
             );
@@ -40,25 +41,21 @@ export default function OpenPositions({ trades }) {
                 {/* Probability bar */}
                 <div className="op-prob-wrap">
                   <div className="op-prob-track">
-                    {/* SL marker */}
                     <div
                       className="op-marker sl"
                       style={{ left: `${t.stopLossProb * 100}%` }}
-                      title={`SL: ${(t.stopLossProb * 100).toFixed(1)}%`}
+                      title={`SL: ${fmtCents(t.stopLossProb)}`}
                     />
-                    {/* Entry marker */}
                     <div
                       className="op-marker entry"
                       style={{ left: `${t.entryProb * 100}%` }}
-                      title={`Entry: ${(t.entryProb * 100).toFixed(1)}%`}
+                      title={`Entry: ${fmtCents(t.entryProb)}`}
                     />
-                    {/* Target marker */}
                     <div
                       className="op-marker target"
                       style={{ left: `${t.targetProb * 100}%` }}
-                      title={`Target: ${(t.targetProb * 100).toFixed(1)}%`}
+                      title={`Target: ${fmtCents(t.targetProb)}`}
                     />
-                    {/* Current fill */}
                     <div
                       className="op-prob-fill"
                       style={{
@@ -68,16 +65,16 @@ export default function OpenPositions({ trades }) {
                     />
                   </div>
                   <div className="op-prob-labels">
-                    <span className="red">{(t.stopLossProb * 100).toFixed(0)}%</span>
-                    <span style={{ fontWeight: 700 }}>{probPct}%</span>
-                    <span className="green">{(t.targetProb * 100).toFixed(0)}%</span>
+                    <span className="red">{fmtCents(t.stopLossProb)}</span>
+                    <span style={{ fontWeight: 700 }}>{fmtCents(prob)}</span>
+                    <span className="green">{fmtCents(t.targetProb)}</span>
                   </div>
                 </div>
 
                 <div className="open-meta">
                   <span className="muted">Stake: {fmtUSD(t.stake)}</span>
-                  <span className="green">+{toTarget}% to tgt</span>
-                  <span className="red">-{toSL}% to SL</span>
+                  <span className="green">+{toTarget}¢ to tgt</span>
+                  <span className="red">-{toSL}¢ to SL</span>
                 </div>
               </div>
             );

@@ -1,6 +1,9 @@
 const fmtUSD = (n, d = 4) =>
   "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 
+const fmtCents = (prob) =>
+  prob !== null && prob !== undefined ? `${Math.round(prob * 100)}¢` : "—";
+
 const fmtTime = (iso) =>
   iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
 
@@ -32,8 +35,8 @@ export default function TradeHistory({ trades }) {
               <th>Type</th>
               <th>Open Time</th>
               <th>Open Price</th>
-              <th>Entry%</th>
-              <th>Exit%</th>
+              <th>Entry ¢</th>
+              <th>Exit ¢</th>
               <th>Close Time</th>
               <th>Duration</th>
               <th>P&L</th>
@@ -65,11 +68,8 @@ export default function TradeHistory({ trades }) {
                     </td>
                     <td className="muted">{fmtTime(t.openedAt)}</td>
                     <td>${Number(t.entryPrice).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
-                    <td className="muted">{((t.entryProb ?? 0) * 100).toFixed(1)}%</td>
-                    <td className="muted">
-                      {t.exitProb !== null && t.exitProb !== undefined
-                        ? ((t.exitProb) * 100).toFixed(1) + "%" : "—"}
-                    </td>
+                    <td className="muted">{fmtCents(t.entryProb)}</td>
+                    <td className="muted">{fmtCents(t.exitProb)}</td>
                     <td className="muted">{fmtTime(t.closedAt)}</td>
                     <td className="muted">{dur(t.openedAt, t.closedAt)}</td>
                     <td style={{ color: pnl >= 0 ? "#3fb950" : "#f85149", fontWeight: 700 }}>

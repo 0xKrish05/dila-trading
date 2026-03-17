@@ -1,4 +1,4 @@
-/* ── Variables ────────────────────────────────────────────────────────────── */
+/* ── Variables: Simulated mode ─────────────────────────────────────────────── */
 :root {
   --bg:      #0d1117;
   --surf:    #161b22;
@@ -13,6 +13,47 @@
   --yellow:  #e3b341;
   --purple:  #bc8cff;
 }
+
+/* ── Mainnet override: deep black ──────────────────────────────────────────── */
+.mainnet-mode {
+  --bg:      #000000;
+  --surf:    #080808;
+  --surf2:   #101010;
+  --border:  #1e1e1e;
+  --text:    #e0e0e0;
+  --muted:   #666666;
+  --orange:  #ff9500;
+}
+.mainnet-mode body,
+.mainnet-mode .app { background: var(--bg); }
+
+.mainnet-mode .hdr {
+  background: #000;
+  border-bottom: 1px solid #1a1a1a;
+  box-shadow: 0 1px 12px rgba(255, 149, 0, .08);
+}
+
+.mainnet-mode .card {
+  background: var(--surf);
+  border-color: var(--border);
+  box-shadow: 0 2px 16px rgba(0,0,0,.6);
+}
+
+.mainnet-mode .eq-stat,
+.mainnet-mode .open-row,
+.mainnet-mode .lat-box {
+  background: var(--surf2);
+}
+
+.mainnet-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: linear-gradient(90deg, #1a0a00, #200e00);
+  border-bottom: 1px solid #3d1f00;
+  padding: 5px 18px;
+  font-size: .78rem; font-weight: 600; color: #f0883e;
+  letter-spacing: .03em;
+}
+.mainnet-banner .blink { animation: pulse 1s infinite; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -59,6 +100,41 @@ body {
 .btn-reset { background: var(--surf2); color: var(--muted); border-color: var(--border); }
 .btn-test:hover, .btn-reset:hover { opacity: .8; }
 
+/* ── Mode Toggle ────────────────────────────────────────────────────────── */
+.mode-toggle {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none;
+  padding: 4px 8px; border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surf2);
+  transition: all .2s;
+}
+.mode-toggle:hover { border-color: var(--orange); }
+
+.mode-lbl {
+  font-size: .7rem; font-weight: 700; letter-spacing: .05em;
+  color: var(--muted); transition: color .2s;
+}
+.mode-lbl.active { color: var(--text); }
+.mode-lbl.mainnet-lbl.active { color: var(--orange); }
+
+.toggle-track {
+  width: 34px; height: 18px; border-radius: 9px;
+  background: var(--border);
+  position: relative; transition: background .25s;
+  flex-shrink: 0;
+}
+.toggle-track.mainnet { background: var(--orange); }
+
+.toggle-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff;
+  transition: transform .25s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+.toggle-track.mainnet .toggle-thumb { transform: translateX(16px); }
+
 /* ── Dashboard layout ───────────────────────────────────────────────────── */
 .dashboard { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -94,8 +170,52 @@ body {
 
 /* ── Price panel ────────────────────────────────────────────────────────── */
 .price-card { display: flex; flex-direction: column; gap: 8px; }
+
+.price-top-row {
+  display: flex; align-items: flex-start; gap: 16px;
+}
+.price-left { flex: 1; }
 .price-big  { font-size: 2.2rem; font-weight: 800; font-family: 'Courier New', monospace; }
 .price-sub  { font-size: .75rem; }
+
+/* ── Polymarket price box ───────────────────────────────────────────────── */
+.poly-box {
+  background: var(--surf2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 160px;
+  display: flex; flex-direction: column; gap: 6px;
+  flex-shrink: 0;
+}
+.poly-box-lbl {
+  font-size: .65rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  display: flex; align-items: center; gap: 5px;
+}
+.poly-dot-sm {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #8eedf7; display: inline-block;
+  box-shadow: 0 0 4px #8eedf7;
+}
+.poly-prices {
+  display: flex; align-items: center; gap: 8px;
+}
+.poly-price-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1;
+}
+.poly-dir {
+  font-size: .68rem; font-weight: 600; letter-spacing: .03em;
+}
+.poly-price-item.up .poly-dir  { color: var(--green); }
+.poly-price-item.dn .poly-dir  { color: var(--red); }
+.poly-cents {
+  font-size: 1.3rem; font-weight: 800; font-family: 'Courier New', monospace;
+}
+.poly-price-item.up .poly-cents { color: var(--green); }
+.poly-price-item.dn .poly-cents { color: var(--red); }
+.poly-divider { width: 1px; height: 30px; background: var(--border); }
+.poly-note { font-size: .63rem; text-align: center; }
 
 .prob-wrap  { display: flex; flex-direction: column; gap: 4px; }
 .prob-labels { display: flex; justify-content: space-between; font-size: .75rem; font-weight: 600; }
@@ -160,6 +280,80 @@ body {
 .row-loss td  { border-left: 2px solid var(--red); }
 .row-open td  { border-left: 2px solid var(--orange); }
 
+/* ── Modal overlay ──────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.75);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+  animation: fadeIn .15s;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+.modal-box {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 440px; width: 90%;
+  box-shadow: 0 24px 64px rgba(0,0,0,.7);
+  animation: slideUp .2s;
+}
+.creds-box { max-width: 480px; }
+@keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+.modal-icon { font-size: 2.4rem; text-align: center; margin-bottom: 10px; }
+.modal-title {
+  font-size: 1.1rem; font-weight: 700; text-align: center;
+  margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.modal-body {
+  font-size: .88rem; color: var(--muted); line-height: 1.6;
+  text-align: center; margin-bottom: 6px;
+}
+.modal-sub { font-size: .82rem; color: var(--muted); margin-bottom: 18px; }
+
+.modal-actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+.btn-modal {
+  padding: 8px 18px; border-radius: 7px; font-size: .85rem;
+  font-weight: 600; cursor: pointer; border: 1px solid;
+  transition: opacity .15s;
+}
+.btn-modal:hover { opacity: .8; }
+.btn-modal.cancel  { background: var(--surf2); color: var(--muted); border-color: var(--border); }
+.btn-modal.confirm { background: #2d1600; color: var(--orange); border-color: #7a3700; }
+.btn-modal:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Credentials form ───────────────────────────────────────────────────── */
+.creds-form { display: flex; flex-direction: column; gap: 12px; }
+.cred-label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: .8rem; font-weight: 600; color: var(--muted);
+}
+.req { color: var(--red); }
+.cred-input {
+  background: var(--surf2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px;
+  color: var(--text); font-size: .88rem; font-family: monospace;
+  transition: border-color .15s;
+}
+.cred-input:focus { outline: none; border-color: var(--orange); }
+.cred-input::placeholder { color: var(--muted); font-family: inherit; }
+.cred-error {
+  background: #3a1c1c; border: 1px solid #da3633;
+  color: var(--red); border-radius: 6px;
+  padding: 8px 12px; font-size: .82rem;
+}
+
+/* ── Polymarket dot in modal ────────────────────────────────────────────── */
+.poly-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #8eedf7; display: inline-block;
+  box-shadow: 0 0 6px #8eedf7;
+}
+
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
@@ -170,4 +364,6 @@ body {
   .row-top { grid-template-columns: 1fr; }
   .row-mid { grid-template-columns: 1fr; }
   .price-big { font-size: 1.6rem; }
+  .price-top-row { flex-direction: column; }
+  .poly-box { min-width: unset; width: 100%; }
 }

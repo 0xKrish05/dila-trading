@@ -9,6 +9,7 @@ const path    = require("path");
 const db           = require("./db");
 const webhookRoute = require("./routes/webhook");
 const apiRoute     = require("./routes/api");
+const modeRoute    = require("./routes/mode");
 const priceService = require("./services/priceService");
 const cycleManager = require("./services/cycleManager");
 const Portfolio    = require("./models/Portfolio");
@@ -32,6 +33,7 @@ if (process.env.NODE_ENV === "production") {
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/webhook", webhookRoute(io));
+app.use("/api/mode",    modeRoute(io));
 app.use("/api",         apiRoute(io));
 
 // SPA fallback

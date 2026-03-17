@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import socket from "./socket";
 import CycleTimer     from "./components/CycleTimer";
 import EquityPanel    from "./components/EquityPanel";
@@ -6,6 +6,7 @@ import PricePanel     from "./components/PricePanel";
 import TradeHistory   from "./components/TradeHistory";
 import OpenPositions  from "./components/OpenPositions";
 import PortfolioChart from "./components/PortfolioChart";
+import ModeToggle     from "./components/ModeToggle";
 
 const INITIAL_BALANCE = 500;
 
@@ -13,6 +14,7 @@ export default function App() {
   const [connected,     setConnected]     = useState(false);
   const [price,         setPrice]         = useState(null);
   const [probUp,        setProbUp]        = useState(0.5);
+  const [polyCents,     setPolyCents]     = useState(null);
   const [cycle,         setCycle]         = useState(null);
   const [portfolio,     setPortfolio]     = useState(null);
   const [trades,        setTrades]        = useState([]);
@@ -20,6 +22,8 @@ export default function App() {
   const [equityHistory, setEquityHistory] = useState([]);
   const [lastSignal,    setLastSignal]    = useState(null);
   const [latency,       setLatency]       = useState(null);
+  const [mode,          setMode]          = useState("sim");
+  const [mainnetProfile, setMainnetProfile] = useState(null);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const balance      = portfolio?.balance        ?? INITIAL_BALANCE;
@@ -43,6 +47,8 @@ export default function App() {
     ? (latTrades.reduce((s, t) => s + t.totalLatencyMs, 0) / latTrades.length).toFixed(0)
     : null;
 
+  const isMainnet = mode === "mainnet";
+
   // ── Socket setup ──────────────────────────────────────────────────────────
   useEffect(() => {
     socket.on("connect",    () => setConnected(true));
@@ -55,9 +61,19 @@ export default function App() {
       if (cycle)      setCycle(cycle);
     });
 
-    socket.on("price_update",     ({ price, probUp }) => { setPrice(price); setProbUp(probUp); });
+    socket.on("price_update", ({ price, probUp, polyCents }) => {
+      setPrice(price);
+      setProbUp(probUp);
+      if (polyCents) setPolyCents(polyCents);
+    });
+
     socket.on("cycle_tick",       setCycle);
     socket.on("portfolio_update", setPortfolio);
+
+    socket.on("mode_change", ({ mode, profile }) => {
+      setMode(mode);
+      setMainnetProfile(profile ?? null);
+    });
 
     socket.on("signal_received", (data) => {
       setLastSignal(data);
@@ -96,6 +112,10 @@ export default function App() {
     fetch("/api/trades").then(r => r.json()).then(setTrades);
     fetch("/api/open").then(r => r.json()).then(setOpenTrades);
     fetch("/api/equity-history").then(r => r.json()).then(setEquityHistory);
+    fetch("/api/mode").then(r => r.json()).then(d => {
+      if (d.mode) setMode(d.mode);
+      if (d.profile) setMainnetProfile(d.profile);
+    });
 
     return () => socket.removeAllListeners();
   }, []);
@@ -113,13 +133,36 @@ export default function App() {
     });
   };
 
+  const handleModeChange = (newMode, profile) => {
+    setMode(newMode);
+    setMainnetProfile(profile ?? null);
+  };
+
   return (
-    <div className="app">
+    <div className={`app ${isMainnet ? "mainnet-mode" : ""}`}>
+      {/* ── Mainnet warning banner ── */}
+      {isMainnet && (
+        <div className="mainnet-banner">
+          <span className="blink">🔴</span>
+          MAINNET LIVE TRADING ACTIVE
+          {mainnetProfile && (
+            <span style={{ marginLeft: 8, color: "#aaa" }}>
+              · {mainnetProfile.name}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── Header ── */}
       <header className="hdr">
         <div className="hdr-left">
           <span className="logo">⚡ DILA</span>
-          <span className="hdr-sub">Neural Momentum · BTC 5-Min · Simulated</span>
+          <span className="hdr-sub">
+            Neural Momentum · BTC 5-Min ·{" "}
+            <span style={{ color: isMainnet ? "#f0883e" : "inherit" }}>
+              {isMainnet ? "Mainnet" : "Simulated"}
+            </span>
+          </span>
         </div>
         <div className="hdr-right">
           <span className={`dot ${connected ? "live" : "dead"}`} />
@@ -132,6 +175,8 @@ export default function App() {
           <button className="btn-test buy"  onClick={() => sendTestSignal("BUY")}>Test BUY</button>
           <button className="btn-test sell" onClick={() => sendTestSignal("SELL")}>Test SELL</button>
           <button className="btn-reset" onClick={handleReset}>Reset</button>
+          {/* ── Sim / Mainnet toggle ── */}
+          <ModeToggle mode={mode} onModeChange={handleModeChange} />
         </div>
       </header>
 
@@ -140,7 +185,7 @@ export default function App() {
         <div className="row-top">
           <CycleTimer cycle={cycle} />
           <PricePanel
-            price={price} probUp={probUp}
+            price={price} probUp={probUp} polyCents={polyCents}
             latency={latency} avgLatency={avgLatency}
             lastSignal={lastSignal}
           />
