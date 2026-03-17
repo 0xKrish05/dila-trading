@@ -6,14 +6,15 @@ const { Server } = require("socket.io");
 const cors    = require("cors");
 const path    = require("path");
 
-const db           = require("./db");
-const webhookRoute = require("./routes/webhook");
-const apiRoute     = require("./routes/api");
-const modeRoute    = require("./routes/mode");
-const priceService = require("./services/priceService");
-const cycleManager = require("./services/cycleManager");
-const Portfolio    = require("./models/Portfolio");
-const Trade        = require("./models/Trade");
+const db                = require("./db");
+const webhookRoute      = require("./routes/webhook");
+const apiRoute          = require("./routes/api");
+const modeRoute         = require("./routes/mode");
+const priceService      = require("./services/priceService");
+const cycleManager      = require("./services/cycleManager");
+const polymarketService = require("./services/polymarketService");
+const Portfolio         = require("./models/Portfolio");
+const Trade             = require("./models/Trade");
 
 const app    = express();
 const server = http.createServer(app);
@@ -68,6 +69,7 @@ io.on("connection", async (socket) => {
 db.connect().then(() => {
   priceService.start(io);
   cycleManager.start(io);
+  polymarketService.start(io);  // real-time Polymarket BTC market prices
 
   // Close all open trades when cycle enters CLOSING stage (2 min remaining)
   const tradeEngine = require("./services/tradeEngine");

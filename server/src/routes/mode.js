@@ -1,10 +1,11 @@
 /**
- * GET  /api/mode        — returns current mode
- * POST /api/mode        — switches mode, verifies credentials for mainnet
+ * GET  /api/mode        — returns current mode + profile
+ * POST /api/mode        — switches mode, verifies Polymarket account for mainnet
  */
-const express = require("express");
+const express          = require("express");
+const polymarketService = require("../services/polymarketService");
 
-let currentMode = "sim"; // "sim" | "mainnet"
+let currentMode    = "sim"; // "sim" | "mainnet"
 let mainnetProfile = null;
 
 module.exports = function (io) {
@@ -23,14 +24,31 @@ module.exports = function (io) {
 
     if (mode === "mainnet") {
       if (!credentials?.walletAddress) {
-        return res.status(400).json({ error: "Credentials required" });
+        return res.status(400).json({ error: "Wallet address is required" });
       }
 
-      const verified = await verifyCredentials(credentials);
-      if (!verified.ok) {
-        return res.status(401).json({ error: verified.error });
+      const addr = credentials.walletAddress.trim();
+
+      // Strict wallet address format check
+      if (!addr.startsWith("0x") || addr.length !== 42) {
+        return res.status(400).json({
+          error: "Invalid wallet address. Must start with 0x and be 42 characters long.",
+        });
       }
-      mainnetProfile = verified.profile;
+
+      // Fetch real Polymarket account — returns error if not found
+      const result = await polymarketService.fetchUserAccount(addr);
+
+      if (!result.ok) {
+        return res.status(401).json({ error: result.error });
+      }
+
+      // Store additional API credentials (for future CLOB order signing)
+      result.profile.apiKey     = credentials.apiKey     || null;
+      result.profile.apiSecret  = credentials.apiSecret  || null;
+      result.profile.passphrase = credentials.passphrase || null;
+
+      mainnetProfile = result.profile;
     } else {
       mainnetProfile = null;
     }
@@ -42,37 +60,3 @@ module.exports = function (io) {
 
   return router;
 };
-
-async function verifyCredentials(creds) {
-  const addr = creds.walletAddress?.trim();
-
-  // Basic format check
-  if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
-    return { ok: false, error: "Invalid wallet address format (must be 0x + 40 hex chars)" };
-  }
-
-  // Try Polymarket profile lookup
-  try {
-    const resp = await fetch(
-      `https://data-api.polymarket.com/profile?address=${addr.toLowerCase()}`,
-      { signal: AbortSignal.timeout(5000) }
-    );
-    if (resp.ok) {
-      const data = await resp.json();
-      return {
-        ok: true,
-        profile: {
-          address: addr,
-          name:    data.name || data.username || addr.slice(0, 8) + "…",
-          avatar:  data.profileImage || null,
-        },
-      };
-    }
-  } catch (_) { /* network error — fallback */ }
-
-  // Fallback: accept valid address even if profile fetch fails
-  return {
-    ok: true,
-    profile: { address: addr, name: addr.slice(0, 8) + "…", avatar: null },
-  };
-}

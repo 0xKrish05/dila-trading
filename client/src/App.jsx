@@ -22,8 +22,9 @@ export default function App() {
   const [equityHistory, setEquityHistory] = useState([]);
   const [lastSignal,    setLastSignal]    = useState(null);
   const [latency,       setLatency]       = useState(null);
-  const [mode,          setMode]          = useState("sim");
+  const [mode,           setMode]           = useState("sim");
   const [mainnetProfile, setMainnetProfile] = useState(null);
+  const [polyMarket,     setPolyMarket]     = useState(null); // real Polymarket prices
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const balance      = portfolio?.balance        ?? INITIAL_BALANCE;
@@ -65,6 +66,11 @@ export default function App() {
       setPrice(price);
       setProbUp(probUp);
       if (polyCents) setPolyCents(polyCents);
+    });
+
+    socket.on("poly_market_update", (data) => {
+      setPolyMarket(data);
+      setPolyCents(data); // always use real Polymarket data when available
     });
 
     socket.on("cycle_tick",       setCycle);
@@ -199,6 +205,7 @@ export default function App() {
           wins={wins} losses={closed.length - wins}
           winRate={winRate} profitable={wins}
           avgDuration={avgDuration}
+          mode={mode} mainnetProfile={mainnetProfile}
         />
 
         {/* Row 3 */}

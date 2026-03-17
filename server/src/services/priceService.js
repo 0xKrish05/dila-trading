@@ -4,8 +4,9 @@
  * Feeds real-time price into tradeEngine for monitoring open positions.
  */
 
-const WebSocket   = require("ws");
-const tradeEngine = require("./tradeEngine");
+const WebSocket         = require("ws");
+const tradeEngine       = require("./tradeEngine");
+const polymarketService = require("./polymarketService");
 
 class PriceService {
   constructor() {
@@ -70,14 +71,12 @@ class PriceService {
 
     if (this.io) {
       const probUp = parseFloat(this.currentProbUp.toFixed(4));
+      // Keep polymarketService in sync (used as fallback when no real market found)
+      polymarketService.updateFromProbUp(probUp);
       this.io.emit("price_update", {
         price:     this.currentPrice,
         probUp,
-        // Polymarket-style share prices in cents
-        polyCents: {
-          yes: Math.round(probUp * 100),        // UP share price
-          no:  Math.round((1 - probUp) * 100),  // DOWN share price
-        },
+        polyCents: polymarketService.getLastPrices(), // real or estimated
         timestamp: Date.now(),
       });
     }
