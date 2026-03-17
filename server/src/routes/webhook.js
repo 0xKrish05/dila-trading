@@ -74,11 +74,7 @@ module.exports = function (io) {
     });
 
     const placed = !!trade;
-    const reason = !placed
-      ? (cycle.stage !== "ACTIVE"
-          ? `Signal rejected — cycle stage is ${cycle.stage} (${cycle.remaining}s remaining). Trades only accepted during ACTIVE stage.`
-          : "Signal rejected — insufficient margin or zero stake")
-      : null;
+    const reason = !placed ? "Signal rejected — DB error or balance depleted" : null;
 
     if (!placed) console.log(`[WEBHOOK] ⚠ Not placed: ${reason}`);
 

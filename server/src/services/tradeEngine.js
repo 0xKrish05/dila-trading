@@ -41,31 +41,30 @@ class TradeEngine {
 
   async onSignal(signal, meta = {}) {
     const serverReceivedAt = Date.now();
+    const cycleState = cycleManager.getState();
 
-    if (!cycleManager.isInTradingWindow()) {
-      console.log(`[ENGINE] ${signal} ignored — outside trading window`);
-      return null;
+    // Log cycle stage but NEVER block — signal always places a trade
+    if (cycleState.stage !== "ACTIVE") {
+      console.log(`[ENGINE] ${signal} — cycle stage: ${cycleState.stage} (placing anyway)`);
     }
 
     let portfolio = await this._ensurePortfolio();
 
-    // 1% of TOTAL equity (not just free margin)
-    const stake = parseFloat((portfolio.balance * RISK_PCT).toFixed(2));
+    // 1% of TOTAL equity, floor at $1
+    let stake = parseFloat((portfolio.balance * RISK_PCT).toFixed(2));
+    if (stake < 1) stake = 1;
 
-    // Free margin check
+    // Free margin — use stake even if locked equity is high (sim mode allows it)
     const openTrades   = await Trade.find({ status: "OPEN" });
     const lockedEquity = openTrades.reduce((s, t) => s + t.stake, 0);
     const freeMargin   = portfolio.balance - lockedEquity;
-
-    if (stake > freeMargin || stake < 0.01) {
-      console.log(`[ENGINE] Insufficient margin: stake=$${stake} free=$${freeMargin.toFixed(2)}`);
-      return null;
-    }
+    if (freeMargin < stake) stake = Math.max(parseFloat(freeMargin.toFixed(2)), 1);
 
     const direction  = signal === "BUY" ? "UP" : "DOWN";
-    const entryPrice = getPrice();
-    // Use ACTUAL live probUp so monitor can realistically hit TP/SL
-    const rawProb    = getProb();
+    // Use live price — fallback to 0 if price feed not yet ready (stored as 0)
+    const entryPrice = getPrice() || 0;
+    // Use live prob — fallback to neutral 0.5 if price feed not yet ready
+    const rawProb    = getProb() || 0.5;
     const entryProb  = parseFloat(
       (direction === "UP" ? rawProb : 1 - rawProb).toFixed(4)
     );
