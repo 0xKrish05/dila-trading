@@ -8,13 +8,16 @@
  *   ACTIVE   → trading window open  (4:59 → 2:00 remaining)
  *   CLOSING  → last 2 minutes, no new trades accepted
  *
- * Emits every 500ms: 'cycle_tick'
- * Emits on change  : 'new_cycle', 'stage_change'
+ * Emits every 500ms via Socket.IO: 'cycle_tick'
+ * Emits via Node EventEmitter on stage change: 'stage_change'
  */
 
-class CycleManager {
+const { EventEmitter } = require("events");
+
+class CycleManager extends EventEmitter {
   constructor() {
-    this.io            = null;
+    super();
+    this.io             = null;
     this.currentCycleId = null;
     this.stage          = "WAITING";
     this._handle        = null;
@@ -39,6 +42,8 @@ class CycleManager {
       this.stage = info.stage;
       console.log(`[CYCLE] Stage: ${info.stage}`);
       this.io.emit("stage_change", info);
+      // Also emit locally so server-side listeners can react
+      this.emit("stage_change", info);
     }
 
     this.io.emit("cycle_tick", info);

@@ -20,6 +20,10 @@ const getPrice = () => {
   if (!priceService) priceService = require("./priceService");
   return priceService.getCurrentPrice();
 };
+const getProb = () => {
+  if (!priceService) priceService = require("./priceService");
+  return priceService.getCurrentProb();
+};
 
 const INITIAL_BALANCE = parseFloat(process.env.INITIAL_BALANCE || "500");
 const RISK_PCT        = 0.01;   // 1% per trade
@@ -60,8 +64,12 @@ class TradeEngine {
 
     const direction  = signal === "BUY" ? "UP" : "DOWN";
     const entryPrice = getPrice();
-    const entryProb  = this._simulateEntryProb(direction);
-    const targetProb  = parseFloat(Math.min(0.99, entryProb + TARGET_DELTA).toFixed(4));
+    // Use ACTUAL live probUp so monitor can realistically hit TP/SL
+    const rawProb    = getProb();
+    const entryProb  = parseFloat(
+      (direction === "UP" ? rawProb : 1 - rawProb).toFixed(4)
+    );
+    const targetProb   = parseFloat(Math.min(0.99, entryProb + TARGET_DELTA).toFixed(4));
     const stopLossProb = parseFloat(Math.max(0.01, entryProb - SL_DELTA).toFixed(4));
 
     const latencyMs      = serverReceivedAt - (meta.workerReceivedAt || serverReceivedAt);
@@ -223,14 +231,6 @@ class TradeEngine {
     return p;
   }
 
-  _simulateEntryProb(direction) {
-    // Simulate a realistic entry probability slightly biased toward signal direction
-    // Real implementation: would come from live Polymarket CLOB
-    const base  = 0.50;
-    const bias  = Math.random() * 0.06;          // 0 – 0.06
-    const noise = (Math.random() - 0.5) * 0.015; // ±0.0075
-    return parseFloat(Math.min(0.90, Math.max(0.52, base + bias + noise)).toFixed(4));
-  }
 }
 
 module.exports = new TradeEngine();

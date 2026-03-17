@@ -69,6 +69,16 @@ db.connect().then(() => {
   priceService.start(io);
   cycleManager.start(io);
 
+  // Close all open trades when cycle enters CLOSING stage (2 min remaining)
+  const tradeEngine = require("./services/tradeEngine");
+  tradeEngine.setIo(io);
+  cycleManager.on("stage_change", async (info) => {
+    if (info.stage === "CLOSING") {
+      console.log("[CYCLE] CLOSING — expiring open trades at market");
+      await tradeEngine.expireOpenTrades(priceService.getCurrentProb());
+    }
+  });
+
   const PORT = process.env.PORT || 5000;
   server.listen(PORT, () =>
     console.log(`[APP] DILA Trading Server -> http://localhost:${PORT}`)
