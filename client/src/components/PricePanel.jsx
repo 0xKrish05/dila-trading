@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from "react";
+
 const fmt = (n, d = 2) =>
   Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export default function PricePanel({ price, probUp, polyCents, latency, avgLatency, lastSignal }) {
+export default function PricePanel({ price, probUp, polyCents, priceDir, latency, avgLatency, lastSignal }) {
   const probPct = ((probUp ?? 0.5) * 100).toFixed(1);
   const isUp    = (probUp ?? 0.5) >= 0.5;
 
@@ -10,16 +12,37 @@ export default function PricePanel({ price, probUp, polyCents, latency, avgLaten
   const isReal   = polyCents?.source === "polymarket";
   const srcLabel = isReal ? "Polymarket live" : "Binance live";
 
+  // Flash animation: re-apply class each time price changes
+  const [flashClass, setFlashClass] = useState("");
+  const flashTimer = useRef(null);
+
+  useEffect(() => {
+    if (!price) return;
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    const cls = priceDir === "up" ? "price-flash-up" : priceDir === "dn" ? "price-flash-dn" : "";
+    setFlashClass(cls);
+    flashTimer.current = setTimeout(() => setFlashClass(""), 400);
+  }, [price, priceDir]);
+
   return (
     <div className="card price-card">
-      <div className="card-lbl">Live Market</div>
+      <div className="card-lbl" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        Live Market
+        <span className={`live-dot ${price ? "active" : ""}`} title="Price feed live" />
+      </div>
 
       {/* Top row: BTC price + Polymarket box */}
       <div className="price-top-row">
         {/* BTC price */}
         <div className="price-left">
-          <div className="price-big">${price ? fmt(price) : "——"}</div>
-          <div className="price-sub muted">BTC / USDT (Binance)</div>
+          <div className={`price-big ${flashClass}`}>
+            ${price ? fmt(price) : "——"}
+          </div>
+          <div className="price-sub muted">
+            BTC / USDT · Binance
+            {priceDir === "up" && <span style={{ color: "var(--green)", marginLeft: 4 }}>▲</span>}
+            {priceDir === "dn" && <span style={{ color: "var(--red)",   marginLeft: 4 }}>▼</span>}
+          </div>
         </div>
 
         {/* Polymarket share prices */}

@@ -5,8 +5,21 @@
 const express          = require("express");
 const polymarketService = require("../services/polymarketService");
 
-let currentMode    = "sim"; // "sim" | "mainnet"
-let mainnetProfile = null;
+let currentMode     = "sim"; // "sim" | "mainnet"
+let mainnetProfile  = null;
+let _refreshHandle  = null;
+
+async function _refreshProfile(io) {
+  if (currentMode !== "mainnet" || !mainnetProfile?.address) return;
+  try {
+    const result = await polymarketService.fetchUserAccount(mainnetProfile.address);
+    if (result.ok) {
+      mainnetProfile = { ...result.profile, apiKey: mainnetProfile.apiKey };
+      io.emit("mode_change", { mode: "mainnet", profile: mainnetProfile });
+      console.log("[MODE] Mainnet profile refreshed");
+    }
+  } catch (_) {}
+}
 
 module.exports = function (io) {
   const router = express.Router();
@@ -52,6 +65,11 @@ module.exports = function (io) {
     }
 
     currentMode = mode;
+    // Start/stop 30s profile refresh cycle
+    if (_refreshHandle) clearInterval(_refreshHandle);
+    if (mode === "mainnet") {
+      _refreshHandle = setInterval(() => _refreshProfile(io), 30_000);
+    }
     io.emit("mode_change", { mode: currentMode, profile: mainnetProfile });
     res.json({ ok: true, mode: currentMode, profile: mainnetProfile });
   });

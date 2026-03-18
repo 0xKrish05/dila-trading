@@ -14,17 +14,25 @@ export default function EquityPanel({
   const pnlSign  = totalPnl >= 0 ? "+" : "";
   const isMainnet = mode === "mainnet";
 
+  // In mainnet: real USDC is the primary balance, show alongside sim P&L
+  const realUsdc     = mainnetProfile?.usdcBalance ?? null;
+  const realPositions = mainnetProfile?.polyBalance ?? null;
+  const realTotal    = mainnetProfile?.totalValue ?? null;
+
   const simStats = [
-    { lbl: "Sim Equity",      val: fmtUSD(balance),                              color: pnlColor },
-    { lbl: "Sim P&L",         val: pnlSign + fmtUSD(Math.abs(totalPnl), 4),      color: pnlColor },
-    { lbl: "Locked Equity",   val: fmtUSD(lockedEquity),                          color: "#f0883e" },
-    { lbl: "Free Margin",     val: fmtUSD(freeMargin),                            color: "#79c0ff" },
+    // Mainnet: show real wallet balance first
+    ...(isMainnet ? [
+      { lbl: "Wallet USDC",     val: fmtUSD(realUsdc),                             color: "#79c0ff" },
+      { lbl: "Positions Value", val: fmtUSD(realPositions),                         color: "#3fb950" },
+      { lbl: "Total Value",     val: realTotal !== null ? fmtUSD(realTotal) : "—",  color: "#f0883e" },
+    ] : []),
+    { lbl: isMainnet ? "Bot Sim Equity"  : "Sim Equity",      val: fmtUSD(balance),                              color: pnlColor },
+    { lbl: isMainnet ? "Bot P&L"         : "Sim P&L",         val: pnlSign + fmtUSD(Math.abs(totalPnl), 4),      color: pnlColor },
     { lbl: "Total Trades",    val: totalTrades,                                   color: "#c9d1d9" },
     { lbl: "Open Trades",     val: openCount,                                     color: "#f0883e" },
     { lbl: "Win Rate",        val: winRate + "%",                                 color: "#3fb950" },
     { lbl: "Wins",            val: wins,                                          color: "#3fb950" },
     { lbl: "Losses",          val: losses,                                        color: "#f85149" },
-    { lbl: "Profitable",      val: profitable,                                    color: "#3fb950" },
     { lbl: "Avg Duration",    val: avgDuration + "s",                             color: "#8b949e" },
     { lbl: "Stake / Trade",   val: fmtUSD(balance * 0.01),                        color: "#bc8cff" },
   ];

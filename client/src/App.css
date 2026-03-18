@@ -85,6 +85,16 @@ body {
 .dot.dead { background: var(--red); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
+/* Price flash animations */
+@keyframes flash-up { 0%{color:#3fb950;text-shadow:0 0 12px #3fb95088} 100%{color:inherit;text-shadow:none} }
+@keyframes flash-dn { 0%{color:#f85149;text-shadow:0 0 12px #f8514988} 100%{color:inherit;text-shadow:none} }
+.price-flash-up { animation: flash-up 0.4s ease-out forwards; }
+.price-flash-dn { animation: flash-dn 0.4s ease-out forwards; }
+
+/* Live dot on price card */
+.live-dot { width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;transition:background .3s; }
+.live-dot.active { background:var(--green);animation:pulse 1.2s infinite; }
+
 .sig-badge, .sig-pill {
   padding: 2px 8px; border-radius: 4px; font-size: .75rem; font-weight: 700;
 }

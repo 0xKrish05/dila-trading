@@ -59,8 +59,9 @@ class PriceService {
 
   async start(io) {
     this.io = io;
+    this._tickCount = 0;
     await this._bootstrapPrice();       // get price immediately via REST
-    this._pollHandle = setInterval(() => this._restPoll(), 4000); // 4s REST fallback
+    this._pollHandle = setInterval(() => this._restPoll(), 1000); // 1s REST fallback
     this._connect();
     console.log("[PRICE] Price service started");
   }
@@ -111,10 +112,10 @@ class PriceService {
     this._emitUpdate();
   }
 
-  // ── REST poll every 4s — fires when WS is silent ────────────────────────────
+  // ── REST poll every 1s — fires when WS is silent ────────────────────────────
   async _restPoll() {
-    // Skip if WS sent a tick in the last 5s
-    if (this._lastWsTick && Date.now() - this._lastWsTick < 5000) return;
+    // Skip if WS sent a tick in the last 2s
+    if (this._lastWsTick && Date.now() - this._lastWsTick < 2000) return;
 
     for (const src of REST_SOURCES) {
       try {
@@ -143,11 +144,18 @@ class PriceService {
     if (!this.io || !this.currentPrice) return;
     const probUp = parseFloat(this.currentProbUp.toFixed(4));
     polymarketService.updateFromProbUp(probUp);
+    this._tickCount = (this._tickCount || 0) + 1;
+    const dir = this._prevPrice
+      ? (this.currentPrice > this._prevPrice ? "up" : this.currentPrice < this._prevPrice ? "dn" : "flat")
+      : "flat";
+    this._prevPrice = this.currentPrice;
     this.io.emit("price_update", {
       price:     this.currentPrice,
       probUp,
       polyCents: polymarketService.getLastPrices(),
       timestamp: Date.now(),
+      tick:      this._tickCount,
+      dir,       // "up" | "dn" | "flat" — for client flash animation
     });
     tradeEngine.monitorOpenTrades(probUp);
   }

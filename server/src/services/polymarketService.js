@@ -153,6 +153,49 @@ function _connectWS() {
   }
 }
 
+// Polygon RPC endpoints (tried in order — ankr most reliable)
+const POLYGON_RPCS = [
+  "https://rpc.ankr.com/polygon",
+  "https://polygon.llamarpc.com",
+  "https://polygon-rpc.com",
+  "https://rpc-mainnet.matic.network",
+];
+
+// USDC contracts on Polygon (both bridged + native)
+const USDC_CONTRACTS = [
+  "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e (bridged)
+  "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // native USDC
+];
+
+async function _fetchUSDCBalance(addr) {
+  const callData = "0x70a08231" + addr.replace("0x", "").padStart(64, "0");
+  for (const rpc of POLYGON_RPCS) {
+    for (const contract of USDC_CONTRACTS) {
+      try {
+        const r = await fetch(rpc, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "eth_call",
+            params: [{ to: contract, data: callData }, "latest"],
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+        const json = await r.json();
+        const raw  = json?.result;
+        if (raw && raw.length > 2 && raw !== "0x" + "0".repeat(64)) {
+          const bal = parseInt(raw, 16) / 1e6;
+          if (bal >= 0) {
+            console.log(`[POLY] USDC balance=${bal} via ${rpc.slice(8, 30)}`);
+            return parseFloat(bal.toFixed(2));
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  return null;
+}
+
 // ── User account lookup ───────────────────────────────────────────────────────
 async function fetchUserAccount(walletAddress) {
   const addr = walletAddress.toLowerCase().trim();
@@ -171,7 +214,7 @@ async function fetchUserAccount(walletAddress) {
     }
   } catch (_) {}
 
-  // Open positions
+  // Open positions from Polymarket data API
   let polyBalance = null, positions = [];
   try {
     const r2 = await fetch(
@@ -190,31 +233,21 @@ async function fetchUserAccount(walletAddress) {
     }
   } catch (_) {}
 
-  // USDC.e wallet balance on Polygon RPC
-  let usdcBalance = null;
-  for (const contract of [
-    "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e
-    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // native USDC
-  ]) {
-    try {
-      const callData = "0x70a08231" + addr.replace("0x", "").padStart(64, "0");
-      const r3 = await fetch("https://polygon-rpc.com", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0", id: 1, method: "eth_call",
-          params: [{ to: contract, data: callData }, "latest"],
-        }),
-        signal: AbortSignal.timeout(5000),
-      });
-      const json = await r3.json();
-      const raw  = json.result;
-      if (raw && raw !== "0x" && raw !== "0x" + "0".repeat(64)) {
-        const bal = parseInt(raw, 16) / 1e6;
-        if (bal > 0) { usdcBalance = parseFloat(bal.toFixed(2)); break; }
-      }
-    } catch (_) {}
-  }
+  // Try Polymarket value endpoint (total portfolio value including USDC)
+  let totalValue = null;
+  try {
+    const rv = await fetch(
+      `https://data-api.polymarket.com/value?user=${addr}`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (rv.ok) {
+      const vdata = await rv.json();
+      if (vdata?.value !== undefined) totalValue = parseFloat(parseFloat(vdata.value).toFixed(2));
+    }
+  } catch (_) {}
+
+  // USDC wallet balance on Polygon via RPC
+  const usdcBalance = await _fetchUSDCBalance(addr);
 
   return {
     ok: true,
@@ -224,6 +257,7 @@ async function fetchUserAccount(walletAddress) {
       avatar,
       polyBalance:   positions.length > 0 ? polyBalance : null,
       usdcBalance,
+      totalValue,
       positionCount: Array.isArray(positions) ? positions.length : 0,
     },
   };

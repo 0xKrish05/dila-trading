@@ -13,6 +13,7 @@ const INITIAL_BALANCE = 500;
 export default function App() {
   const [connected,     setConnected]     = useState(false);
   const [price,         setPrice]         = useState(null);
+  const [priceDir,      setPriceDir]      = useState("flat");  // "up"|"dn"|"flat"
   const [probUp,        setProbUp]        = useState(0.5);
   const [polyCents,     setPolyCents]     = useState(null);
   const [cycle,         setCycle]         = useState(null);
@@ -62,9 +63,10 @@ export default function App() {
       if (cycle)      setCycle(cycle);
     });
 
-    socket.on("price_update", ({ price, probUp, polyCents }) => {
+    socket.on("price_update", ({ price, probUp, polyCents, dir }) => {
       setPrice(price);
       setProbUp(probUp);
+      if (dir) setPriceDir(dir);
       if (polyCents) setPolyCents(polyCents);
     });
 
@@ -192,6 +194,7 @@ export default function App() {
           <CycleTimer cycle={cycle} />
           <PricePanel
             price={price} probUp={probUp} polyCents={polyCents}
+            priceDir={priceDir}
             latency={latency} avgLatency={avgLatency}
             lastSignal={lastSignal}
           />
