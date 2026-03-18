@@ -10,6 +10,7 @@ const db                = require("./db");
 const webhookRoute      = require("./routes/webhook");
 const apiRoute          = require("./routes/api");
 const modeRoute         = require("./routes/mode");
+const accountRoute      = require("./routes/account");
 const priceService      = require("./services/priceService");
 const cycleManager      = require("./services/cycleManager");
 const polymarketService = require("./services/polymarketService");
@@ -35,6 +36,7 @@ if (process.env.NODE_ENV === "production") {
 // ── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/webhook", webhookRoute(io));
 app.use("/api/mode",    modeRoute(io));
+app.use("/api/account", accountRoute());
 app.use("/api",         apiRoute(io));
 
 // SPA fallback

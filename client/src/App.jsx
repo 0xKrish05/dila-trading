@@ -7,6 +7,7 @@ import TradeHistory   from "./components/TradeHistory";
 import OpenPositions  from "./components/OpenPositions";
 import PortfolioChart from "./components/PortfolioChart";
 import ModeToggle     from "./components/ModeToggle";
+import RealAccount    from "./components/RealAccount";
 
 const INITIAL_BALANCE = 500;
 
@@ -25,7 +26,6 @@ export default function App() {
   const [latency,       setLatency]       = useState(null);
   const [mode,           setMode]           = useState("sim");
   const [mainnetProfile, setMainnetProfile] = useState(null);
-  const [polyMarket,     setPolyMarket]     = useState(null); // real Polymarket prices
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const balance      = portfolio?.balance        ?? INITIAL_BALANCE;
@@ -71,8 +71,7 @@ export default function App() {
     });
 
     socket.on("poly_market_update", (data) => {
-      setPolyMarket(data);
-      setPolyCents(data); // always use real Polymarket data when available
+      setPolyCents(data);
     });
 
     socket.on("cycle_tick",       setCycle);
@@ -229,8 +228,13 @@ export default function App() {
           <OpenPositions trades={openTrades} />
         </div>
 
-        {/* Row 4 */}
+        {/* Row 5 — Sim trade history */}
         <TradeHistory trades={trades} />
+
+        {/* Row 6 — Real Polymarket account (mainnet only) */}
+        {isMainnet && mainnetProfile?.address && (
+          <RealAccount address={mainnetProfile.address} />
+        )}
       </div>
     </div>
   );
