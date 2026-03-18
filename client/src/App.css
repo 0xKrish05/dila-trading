@@ -110,6 +110,30 @@ body {
 .btn-reset { background: var(--surf2); color: var(--muted); border-color: var(--border); }
 .btn-test:hover, .btn-reset:hover { opacity: .8; }
 
+/* ── Big BUY / SELL signal buttons ─────────────────────────────────────── */
+.signal-row {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  padding: 14px 18px 0;
+}
+.big-btn {
+  flex: 1;
+  max-width: 280px;
+  padding: 18px 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: transform .1s, opacity .15s;
+}
+.big-btn:active { transform: scale(.97); }
+.big-btn:hover  { opacity: .88; }
+.big-btn.buy  { background: linear-gradient(135deg, #1a4d28, #2ea043); color: #e6ffe9; }
+.big-btn.sell { background: linear-gradient(135deg, #4d1a1a, #da3633); color: #ffe6e6; }
+
 /* ── Mode Toggle ────────────────────────────────────────────────────────── */
 .mode-toggle {
   display: flex; align-items: center; gap: 6px;

@@ -96,7 +96,7 @@ class PriceService {
   async start(io) {
     this.io = io;
     await this._bootstrapPrice();
-    this._pollHandle = setInterval(() => this._restPoll(), 1000); // 1s REST fallback
+    this._pollHandle = setInterval(() => this._restPoll(), 333); // 3x/s REST fallback
     this._connect();
     console.log("[PRICE] Price service started");
   }
@@ -142,9 +142,9 @@ class PriceService {
     this._emitUpdate("rest");
   }
 
-  // ── REST poll every 1s when WS silent ────────────────────────────────────────
+  // ── REST poll 3x/s when WS silent ───────────────────────────────────────────
   async _restPoll() {
-    if (this._lastWsTick && Date.now() - this._lastWsTick < 2000) return;
+    if (this._lastWsTick && Date.now() - this._lastWsTick < 500) return;
 
     for (const src of REST_SOURCES) {
       try {

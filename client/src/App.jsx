@@ -180,8 +180,6 @@ export default function App() {
               {lastSignal.signal}
             </span>
           )}
-          <button className="btn-test buy"  onClick={() => sendTestSignal("BUY")}>Test BUY</button>
-          <button className="btn-test sell" onClick={() => sendTestSignal("SELL")}>Test SELL</button>
           <button className="btn-reset" onClick={handleReset}>Reset</button>
           {/* ── Sim / Mainnet toggle ── */}
           <ModeToggle mode={mode} onModeChange={handleModeChange} />
@@ -211,7 +209,17 @@ export default function App() {
           mode={mode} mainnetProfile={mainnetProfile}
         />
 
-        {/* Row 3 */}
+        {/* Row 3 — Manual signal buttons */}
+        <div className="signal-row">
+          <button className="big-btn buy" onClick={() => sendTestSignal("BUY")}>
+            ▲ BUY
+          </button>
+          <button className="big-btn sell" onClick={() => sendTestSignal("SELL")}>
+            ▼ SELL
+          </button>
+        </div>
+
+        {/* Row 4 */}
         <div className="row-mid">
           <PortfolioChart
             trades={closed}
